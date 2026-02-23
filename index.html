@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Huella Humana - Chámeza</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- PapaParse for CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #2E7D32; /* Institutional Green */
+            --secondary-color: #4CAF50;
+            --bg-color: #f4f4f4;
+            --text-color: #333;
+            --header-height: 80px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        header {
+            background-color: white;
+            height: var(--header-height);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .logo-container {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .logo-container img {
+            height: 50px;
+            width: auto;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Main Layout */
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            gap: 1rem;
+        }
+
+        @media (min-width: 768px) {
+            main {
+                flex-direction: row;
+                height: calc(100vh - var(--header-height) - 40px); /* Adjust for footer */
+            }
+        }
+
+        /* Map Section */
+        #map-section {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            min-height: 400px;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Info/Chart Section */
+        #info-section {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            overflow-y: auto;
+        }
+
+        .info-header {
+            border-bottom: 2px solid var(--bg-color);
+            padding-bottom: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .info-header h2 {
+            color: var(--primary-color);
+            font-size: 1.8rem;
+        }
+
+        .info-header p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .chart-container {
+            flex: 1;
+            position: relative;
+            min-height: 300px;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .control-btn {
+            background: none;
+            border: 1px solid var(--secondary-color);
+            color: var(--secondary-color);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .control-btn.active {
+            background: var(--secondary-color);
+            color: white;
+        }
+
+        .control-btn:hover {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        /* Footer */
+        footer {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 1rem;
+            font-size: 0.8rem;
+        }
+
+        /* Loading Overlay */
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            font-size: 1.5rem;
+            color: var(--primary-color);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading">Cargando datos...</div>
+
+    <header>
+        <div class="logo-container">
+            <!-- Replace with actual paths if different -->
+            <img src="cunaguaro.png" alt="Cunaguaro" onerror="this.style.display='none'">
+            <img src="fondoaccion.png" alt="Fondo Acción" onerror="this.style.display='none'">
+        </div>
+        <h1>Huella Humana Chámeza</h1>
+    </header>
+
+    <main>
+        <section id="map-section">
+            <div id="map"></div>
+        </section>
+
+        <section id="info-section">
+            <div class="info-header">
+                <h2 id="vereda-name">Seleccione una Vereda</h2>
+                <p>Haga clic en el mapa para ver detalles</p>
+            </div>
+
+            <div id="chart-area" class="hidden">
+                <div class="controls" id="category-controls">
+                    <!-- Buttons generated by JS -->
+                </div>
+                <div class="chart-container">
+                    <canvas id="huellaChart"></canvas>
+                </div>
+            </div>
+            
+            <div id="placeholder-text">
+                <p>La Huella Humana es una medida de la presión antrópica sobre los ecosistemas naturales. Explore el mapa para visualizar la evolución histórica de este indicador en las diferentes veredas del municipio.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Proyecto Huella Humana Chámeza. Desarrollado con apoyo de Cunaguaro y Fondo Acción.</p>
+    </footer>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        // --- Configuration ---
+        const CONFIG = {
+            geoJsonPath: 'veredas.geojson',
+            csvPath: 'huella.csv',
+            mapCenter: [5.21, -72.51], // Approx center of Chámeza
+            mapZoom: 12,
+            colors: {
+                default: '#3388ff',
+                highlight: '#ff7800',
+                chart: {
+                    Overall: '#2E7D32',
+                    Agriculture: '#FDD835',
+                    BuiltUp: '#D32F2F',
+                    HumanAccess: '#1976D2',
+                    EnergyMining: '#7B1FA2',
+                    Transport: '#F57C00',
+                    Pollution: '#5D4037',
+                    NaturalSystemsMod: '#0097A7'
+                }
+            }
+        };
+
+        // --- State ---
+        let state = {
+            geoJson: null,
+            csvData: [],
+            selectedVereda: null,
+            chart: null,
+            activeCategories: ['Overall'] // Default active category
+        };
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await loadData();
+                initMap();
+                initControls();
+                document.getElementById('loading').classList.add('hidden');
+            } catch (error) {
+                console.error("Error initializing app:", error);
+                document.getElementById('loading').textContent = "Error cargando datos. Ver consola.";
+            }
+        });
+
+        // --- Data Loading ---
+        async function loadData() {
+            // Load GeoJSON
+            const geoResponse = await fetch(CONFIG.geoJsonPath);
+            state.geoJson = await geoResponse.json();
+
+            // Load CSV
+            return new Promise((resolve, reject) => {
+                Papa.parse(CONFIG.csvPath, {
+                    download: true,
+                    header: true,
+                    dynamicTyping: true,
+                    complete: (results) => {
+                        state.csvData = results.data;
+                        resolve();
+                    },
+                    error: (err) => reject(err)
+                });
+            });
+        }
+
+        // --- Map Logic ---
+        function initMap() {
+            const map = L.map('map').setView(CONFIG.mapCenter, CONFIG.mapZoom);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            const geoJsonLayer = L.geoJSON(state.geoJson, {
+                style: styleFeature,
+                onEachFeature: onEachFeature
+            }).addTo(map);
+
+            // Fit bounds to polygon
+            map.fitBounds(geoJsonLayer.getBounds());
+
+            function styleFeature(feature) {
+                return {
+                    fillColor: CONFIG.colors.default,
+                    weight: 2,
+                    opacity: 1,
+                    color: 'white',
+                    dashArray: '3',
+                    fillOpacity: 0.5
+                };
+            }
+
+            function highlightFeature(e) {
+                const layer = e.target;
+                layer.setStyle({
+                    weight: 5,
+                    color: '#666',
+                    dashArray: '',
+                    fillOpacity: 0.7
+                });
+                layer.bringToFront();
+            }
+
+            function resetHighlight(e) {
+                const layer = e.target;
+                // Only reset if it's not the selected vereda
+                if (state.selectedVereda !== layer.feature.properties.CODIGO_VER) {
+                    geoJsonLayer.resetStyle(layer);
+                }
+            }
+
+            function onEachFeature(feature, layer) {
+                layer.on({
+                    mouseover: highlightFeature,
+                    mouseout: resetHighlight,
+                    click: (e) => {
+                        // Reset previous selection style if exists
+                        geoJsonLayer.eachLayer(l => {
+                            geoJsonLayer.resetStyle(l);
+                        });
+                        
+                        // Highlight clicked
+                        const layer = e.target;
+                        layer.setStyle({
+                            fillColor: CONFIG.colors.highlight,
+                            fillOpacity: 0.7,
+                            color: '#666',
+                            weight: 5,
+                            dashArray: ''
+                        });
+
+                        selectVereda(feature.properties);
+                    }
+                });
+            }
+        }
+
+        // --- Interaction Logic ---
+        function selectVereda(properties) {
+            state.selectedVereda = properties.CODIGO_VER;
+            
+            // Update UI
+            document.getElementById('vereda-name').textContent = properties.NOMBRE_VER;
+            document.getElementById('placeholder-text').classList.add('hidden');
+            document.getElementById('chart-area').classList.remove('hidden');
+
+            updateChart();
+        }
+
+        // --- Chart Logic ---
+        function initControls() {
+            const container = document.getElementById('category-controls');
+            const categories = Object.keys(CONFIG.colors.chart);
+
+            categories.forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = `control-btn ${state.activeCategories.includes(cat) ? 'active' : ''}`;
+                btn.textContent = cat;
+                btn.onclick = () => toggleCategory(cat, btn);
+                container.appendChild(btn);
+            });
+        }
+
+        function toggleCategory(category, btn) {
+            const index = state.activeCategories.indexOf(category);
+            if (index > -1) {
+                // Prevent removing the last one if you want at least one
+                if (state.activeCategories.length > 1) {
+                    state.activeCategories.splice(index, 1);
+                    btn.classList.remove('active');
+                }
+            } else {
+                state.activeCategories.push(category);
+                btn.classList.add('active');
+            }
+            updateChart();
+        }
+
+        function updateChart() {
+            if (!state.selectedVereda) return;
+
+            // Filter and sort data
+            // Note: Ensure CSV CODIGO_VER matches GeoJSON CODIGO_VER types (string vs number)
+            const veredaData = state.csvData
+                .filter(row => String(row.CODIGO_VER) === String(state.selectedVereda))
+                .sort((a, b) => a.year - b.year);
+
+            if (veredaData.length === 0) {
+                console.warn("No data found for vereda:", state.selectedVereda);
+                return;
+            }
+
+            const years = veredaData.map(row => row.year);
+            const datasets = state.activeCategories.map(cat => ({
+                label: cat,
+                data: veredaData.map(row => row[cat]),
+                borderColor: CONFIG.colors.chart[cat] || '#333',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                tension: 0.1
+            }));
+
+            const ctx = document.getElementById('huellaChart').getContext('2d');
+
+            if (state.chart) {
+                state.chart.destroy();
+            }
+
+            state.chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: years,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        title: {
+                            display: true,
+                            text: 'Evolución de Huella Humana'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Índice'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+
