@@ -193,6 +193,31 @@
         .hidden {
             display: none !important;
         }
+
+        /* Layer Controls */
+        .layer-controls {
+            background: #e8f5e9;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        
+        .layer-controls h3 {
+            font-size: 1rem;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .layer-controls label {
+            display: block;
+            margin-bottom: 0.25rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        
+        .layer-controls input {
+            margin-right: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -217,6 +242,13 @@
             <div class="info-header">
                 <h2 id="vereda-name">Seleccione una Vereda</h2>
                 <p>Haga clic en el mapa para ver detalles</p>
+            </div>
+
+            <div class="layer-controls">
+                <h3>Capas de Priorización</h3>
+                <label><input type="checkbox" id="check-habitat"> Habitat</label>
+                <label><input type="checkbox" id="check-corredores"> Corredores</label>
+                <label><input type="checkbox" id="check-prioritarios"> Zonas Prioritarias</label>
             </div>
 
             <div id="chart-area" class="hidden">
@@ -248,6 +280,11 @@
             csvPath: 'huella.csv',
             mapCenter: [5.21, -72.51], // Approx center of Chámeza
             mapZoom: 12,
+            additionalLayers: {
+                habitat: { path: 'habitat.geojson', color: '#4CAF50', label: 'Habitat' },
+                corredores: { path: 'corredores.geojson', color: '#FF9800', label: 'Corredores' },
+                prioritarios: { path: 'prioritarios.geojson', color: '#F44336', label: 'Prioritarios' }
+            },
             colors: {
                 default: '#3388ff',
                 highlight: '#ff7800',
@@ -266,7 +303,10 @@
 
         // --- State ---
         let state = {
+            mapInstance: null,
             geoJson: null,
+            additionalLayersData: {},
+            mapLayers: {},
             csvData: [],
             selectedVereda: null,
             chart: null,
@@ -288,9 +328,23 @@
 
         // --- Data Loading ---
         async function loadData() {
-            // Load GeoJSON
+            // Load Main GeoJSON
             const geoResponse = await fetch(CONFIG.geoJsonPath);
             state.geoJson = await geoResponse.json();
+
+            // Load Additional Layers
+            for (const [key, config] of Object.entries(CONFIG.additionalLayers)) {
+                try {
+                    const res = await fetch(config.path);
+                    if (res.ok) {
+                        state.additionalLayersData[key] = await res.json();
+                    } else {
+                        console.warn(`Layer ${key} not found`);
+                    }
+                } catch (e) {
+                    console.warn(`Error loading layer ${key}`, e);
+                }
+            }
 
             // Load CSV
             return new Promise((resolve, reject) => {
@@ -309,7 +363,8 @@
 
         // --- Map Logic ---
         function initMap() {
-            const map = L.map('map').setView(CONFIG.mapCenter, CONFIG.mapZoom);
+            state.mapInstance = L.map('map').setView(CONFIG.mapCenter, CONFIG.mapZoom);
+            const map = state.mapInstance;
 
             L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -405,6 +460,36 @@
                 btn.onclick = () => toggleCategory(cat, btn);
                 container.appendChild(btn);
             });
+
+            // Layer Controls
+            ['habitat', 'corredores', 'prioritarios'].forEach(key => {
+                const checkbox = document.getElementById(`check-${key}`);
+                if (checkbox) {
+                    checkbox.addEventListener('change', (e) => toggleLayer(key, e.target.checked));
+                }
+            });
+        }
+
+        function toggleLayer(key, visible) {
+            const map = state.mapInstance;
+            if (!map || !state.additionalLayersData[key]) return;
+
+            if (visible) {
+                if (!state.mapLayers[key]) {
+                    state.mapLayers[key] = L.geoJSON(state.additionalLayersData[key], {
+                        style: {
+                            color: CONFIG.additionalLayers[key].color,
+                            weight: 2,
+                            fillOpacity: 0.4
+                        }
+                    });
+                }
+                state.mapLayers[key].addTo(map);
+            } else {
+                if (state.mapLayers[key]) {
+                    map.removeLayer(state.mapLayers[key]);
+                }
+            }
         }
 
         function toggleCategory(category, btn) {

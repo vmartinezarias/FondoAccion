@@ -1,0 +1,23 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Habitat Area 1"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-72.505, 5.205],
+            [-72.500, 5.205],
+            [-72.500, 5.200],
+            [-72.505, 5.200],
+            [-72.505, 5.205]
+          ]
+        ]
+      }
+    }
+  ]
+}
